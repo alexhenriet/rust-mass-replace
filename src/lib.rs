@@ -1,8 +1,7 @@
 /*
 @TODO: 
-- Use original EOL and not \n
 - Use original file privileges to create new file
-- Fix potentially unwanted last-line EOL (cat -vet Tool/Directory.php |less)
+- Output text only in -v(erbose) mode
 */
 
 use std::error::Error;
@@ -10,7 +9,7 @@ use walkdir::WalkDir;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{self, BufRead, LineWriter};
+use std::io::{self, BufReader, LineWriter};
 use std::path::Path;
 
 pub struct Config {
@@ -54,13 +53,18 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
 pub fn file_contains_string(path: &str, original: &str) -> Result<bool,io::Error>
 {
-  if let Ok(lines) = read_lines(path) {
-    for line in lines {
-      let line = line?;
-      if line.contains(original) {
-        return Ok(true);
-      }
+  let file = File::open(&path)?;
+  let mut file_buffer = BufReader::new(file);
+  let mut buf = String::new();
+  loop {
+    let number_bytes = file_buffer.read_line(&mut buf)?;
+    if number_bytes == 0 { // EOF
+      break;
+    } 
+    if buf.contains(original) {
+      return Ok(true);
     }
+    buf.clear();
   }
   return Ok(false);
 }
@@ -68,26 +72,30 @@ pub fn file_contains_string(path: &str, original: &str) -> Result<bool,io::Error
 pub fn replace_in_file(path: &str, original: &str, replacement: &str) -> Result<i32,io::Error>
 {
   let mut count = 0;
+
   let tmp_path = format!("{}.tmp", path);
   let tmp_file = File::create(&tmp_path)?;
   let mut tmp_file: LineWriter<File> = LineWriter::new(tmp_file);
-  if let Ok(lines) = read_lines(path) {
-    for line in lines {
-      let line = line?;
-      let mut to_write = format!("\n{}", line);
-      if line.contains(original) {
-        to_write = to_write.replace(&original, &replacement);
-        count += 1;
-      }
-      tmp_file.write_all(to_write.as_bytes());
+
+  let file = File::open(&path)?;
+  let mut file_buffer = BufReader::new(file);
+  let mut buf = String::new();
+
+  loop {
+    let number_bytes = file_buffer.read_line(&mut buf)?;
+    if number_bytes == 0 { // EOF
+      break;
+    } 
+    if buf.contains(original) {
+      buf = buf.replace(&original, &replacement);
+      count += 1;
     }
-    tmp_file.flush();
+    tmp_file.write_all(buf.as_bytes());
+    buf.clear();
   }
+
+  tmp_file.flush();
+
   fs::rename(&tmp_path, &path)?;
   return Ok(count);
-}
-
-pub fn read_lines<P: AsRef<Path>>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>> {
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
 }
