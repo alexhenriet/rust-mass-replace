@@ -1,49 +1,55 @@
-/*
-@TODO: 
-- Use original file privileges to create new file
-- Output text only in -v(erbose) mode
-*/
-
 use std::error::Error;
 use walkdir::WalkDir;
-use std::fs;
-use std::fs::File;
-use std::io::prelude::*;
-use std::io::{self, BufReader, LineWriter};
+use std::fs::{self, File};
+use std::io::{self, prelude::*, BufReader, LineWriter};
 
 pub struct Config {
   pub original: String,
   pub replacement: String,
-  pub path: String
+  pub path: String,
+  pub verbose: bool,
 }
 
 impl Config {
   pub fn new(args: &[String]) -> Result<Config,String> {
-      if args.len() < 4 {
-          let message = format!("Syntax is {} $ORIGINAL $REPLACEMENT $PATH", args[0]);
-          return Err(message);
-      }
-      let original = args[1].clone();
-      let replacement = args[2].clone();
-      let path = args[3].clone();
-      Ok(Config { original, replacement, path })
+    let args_count: usize = args.len();
+    if !(4..=5).contains(&args_count) {
+      let message = format!("Syntax is {} [-v] orig_str rplc_str path", args[0]);
+      return Err(message);
+    }
+    let (original, replacement, path, verbose) = parse_args(args);
+    Ok(Config { original, replacement, path, verbose })
+  }
+}
+
+pub fn parse_args(args: &[String]) -> (String, String, String, bool) {
+  if args[1].starts_with("-v") {
+    (args[2].clone(), args[3].clone(), args[4].clone(), true)
+  } else {
+    (args[1].clone(), args[2].clone(), args[3].clone(), false)
   }
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-  println!("REPLACING '{}' BY '{}' IN FOLDER '{}'", config.original, config.replacement, config.path);
+  if config.verbose {
+    println!("Replacing '{}' by '{}' in folder '{}'", config.original, config.replacement, config.path);
+  }
   for entry in WalkDir::new(config.path) {
     let entry = entry?;
     let path = entry.path();
     if path.is_dir() {
       continue;
     }
-    let path_str = &path.to_string_lossy();
-    if let Ok(found) = file_contains_string(path_str, &config.original) {
+    let mut path_str: String = path.to_string_lossy().to_string();
+    if is_symlink(&path)? {
+      path_str = fs::read_link(&path)?.as_path().display().to_string();
+    }
+    if let Ok(found) = file_contains_string(&path_str, &config.original) {
       if found {
-        println!("Found in {}", path_str);
-        let count = replace_in_file(path_str, &config.original, &config.replacement)?;
-        println!("{} lines replaced", count);
+        let count = replace_in_file(&path_str, &config.original, &config.replacement)?;
+        if config.verbose {
+          println!("{} line(s) replaced in {}", count, path_str);
+        }
       }
     }
   }
@@ -65,22 +71,19 @@ pub fn file_contains_string(path: &str, original: &str) -> Result<bool,io::Error
     }
     buf.clear();
   }
-  return Ok(false);
+  Ok(false)
 }
 
 pub fn replace_in_file(path: &str, original: &str, replacement: &str) -> Result<i32,io::Error>
 {
   let mut count = 0;
-
   let tmp_path = format!("{}.tmp", path);
   let tmp_file = File::create(&tmp_path)?;
   let mut tmp_file: LineWriter<File> = LineWriter::new(tmp_file);
-
   let file = File::open(&path)?;
   let permissions = fs::metadata(&path)?.permissions();
   let mut file_buffer = BufReader::new(file);
   let mut buf = String::new();
-
   loop {
     let number_bytes = file_buffer.read_line(&mut buf)?;
     if number_bytes == 0 { // EOF
@@ -93,10 +96,14 @@ pub fn replace_in_file(path: &str, original: &str, replacement: &str) -> Result<
     tmp_file.write_all(buf.as_bytes())?;
     buf.clear();
   }
-
   tmp_file.flush()?;
-
   fs::rename(&tmp_path, &path)?;
   fs::set_permissions(&path, permissions)?;
-  return Ok(count);
+  Ok(count)
+}
+
+pub fn is_symlink(path: &std::path::Path) -> Result<bool,io::Error> {
+  let metadata = fs::symlink_metadata(&path)?;
+  let file_type = metadata.file_type();
+  Ok(file_type.is_symlink())
 }
