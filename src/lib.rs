@@ -10,6 +10,7 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader, LineWriter};
+
 pub struct Config {
   pub original: String,
   pub replacement: String,
@@ -76,6 +77,7 @@ pub fn replace_in_file(path: &str, original: &str, replacement: &str) -> Result<
   let mut tmp_file: LineWriter<File> = LineWriter::new(tmp_file);
 
   let file = File::open(&path)?;
+  let permissions = fs::metadata(&path)?.permissions();
   let mut file_buffer = BufReader::new(file);
   let mut buf = String::new();
 
@@ -95,5 +97,6 @@ pub fn replace_in_file(path: &str, original: &str, replacement: &str) -> Result<
   tmp_file.flush()?;
 
   fs::rename(&tmp_path, &path)?;
+  fs::set_permissions(&path, permissions)?;
   return Ok(count);
 }
