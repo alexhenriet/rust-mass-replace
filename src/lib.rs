@@ -10,8 +10,6 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader, LineWriter};
-use std::path::Path;
-
 pub struct Config {
   pub original: String,
   pub replacement: String,
@@ -90,11 +88,11 @@ pub fn replace_in_file(path: &str, original: &str, replacement: &str) -> Result<
       buf = buf.replace(&original, &replacement);
       count += 1;
     }
-    tmp_file.write_all(buf.as_bytes());
+    tmp_file.write_all(buf.as_bytes())?;
     buf.clear();
   }
 
-  tmp_file.flush();
+  tmp_file.flush()?;
 
   fs::rename(&tmp_path, &path)?;
   return Ok(count);
