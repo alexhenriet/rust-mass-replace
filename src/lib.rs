@@ -1,7 +1,7 @@
 use std::env;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{self, prelude::*, BufReader, LineWriter};
+use std::io::{self, prelude::*, BufReader, LineWriter, Seek, SeekFrom};
 use walkdir::WalkDir;
 
 pub struct Config {
@@ -13,28 +13,31 @@ pub struct Config {
 
 impl Config {
     pub fn new(mut args: env::Args) -> Result<Config, String> {
-        let error_message = format!(
-            "SYNTAX => {} [-v] ORIG_STR RPLC_STR DIRECTORY_PATH",
-            args.next().unwrap()
-        );
+        let program_name = args.next().unwrap();
+        let error_message = || {
+            format!(
+                "SYNTAX => {} [-v] ORIG_STR RPLC_STR DIRECTORY_PATH",
+                program_name
+            )
+        };
         let mut original = match args.next() {
-            None => return Err(error_message),
+            None => return Err(error_message()),
             Some(v) => v,
         };
         let mut verbose = false;
         if original.starts_with("-v") {
             verbose = true;
             original = match args.next() {
-                None => return Err(error_message),
+                None => return Err(error_message()),
                 Some(v) => v,
             };
         }
         let replacement = match args.next() {
-            None => return Err(error_message),
+            None => return Err(error_message()),
             Some(v) => v,
         };
         let path = match args.next() {
-            None => return Err(error_message),
+            None => return Err(error_message()),
             Some(v) => v,
         };
         Ok(Config {
@@ -63,8 +66,12 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         if fs::symlink_metadata(&path)?.file_type().is_symlink() {
             path_str = fs::read_link(&path)?.as_path().display().to_string();
         }
-        if let Ok(true) = file_contains_string(&path_str, &config.original) {
-            let count = replace_in_file(&path_str, &config.original, &config.replacement)?;
+        let file = match File::open(&path_str) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        if let Ok(true) = file_contains_string(&file, &config.original) {
+            let count = replace_in_file(&file, &path_str, &config.original, &config.replacement)?;
             if config.verbose {
                 println!("{} line(s) replaced in {}", count, path_str);
             }
@@ -73,8 +80,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn file_contains_string(path: &str, original: &str) -> Result<bool, io::Error> {
-    let file = File::open(&path)?;
+pub fn file_contains_string(mut file: &File, original: &str) -> Result<bool, io::Error> {
+    file.seek(SeekFrom::Start(0))?;
     let mut file_buffer = BufReader::new(file);
     let mut buf = String::new();
     while file_buffer.read_line(&mut buf)? != 0 {
@@ -86,7 +93,13 @@ pub fn file_contains_string(path: &str, original: &str) -> Result<bool, io::Erro
     Ok(false)
 }
 
-pub fn replace_in_file(path: &str, original: &str, replacement: &str) -> Result<i32, io::Error> {
+pub fn replace_in_file(
+    mut file: &File,
+    path: &str,
+    original: &str,
+    replacement: &str,
+) -> Result<i32, io::Error> {
+    file.seek(SeekFrom::Start(0))?;
     let mut count = 0;
     let tmp_path = format!("{}.tmp", path);
     let tmp_file = File::create(&tmp_path)?;
