@@ -104,7 +104,6 @@ pub fn replace_in_file(
     let tmp_path = format!("{}.tmp", path);
     let tmp_file = File::create(&tmp_path)?;
     let mut tmp_file: LineWriter<File> = LineWriter::new(tmp_file);
-    let file = File::open(&path)?;
     let permissions = fs::metadata(&path)?.permissions();
     let mut file_buffer = BufReader::new(file);
     let mut buf = String::new();
