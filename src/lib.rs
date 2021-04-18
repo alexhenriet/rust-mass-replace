@@ -61,8 +61,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn file_contains_string(mut file: &File, original: &str) -> Result<bool, io::Error> {
-    file.seek(SeekFrom::Start(0))?;
+pub fn file_contains_string(file: &File, original: &str) -> Result<bool, io::Error> {
     let mut file_buffer = BufReader::new(file);
     let mut buf = String::new();
     while file_buffer.read_line(&mut buf)? != 0 {
