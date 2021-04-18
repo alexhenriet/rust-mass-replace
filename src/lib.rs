@@ -12,34 +12,15 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(mut args: env::Args) -> Result<Config, String> {
-        let program_name = args.next().unwrap();
-        let error_message = || {
-            format!(
-                "SYNTAX => {} [-v] ORIG_STR RPLC_STR DIRECTORY_PATH",
-                program_name
-            )
-        };
-        let mut original = match args.next() {
-            None => return Err(error_message()),
-            Some(v) => v,
-        };
+    pub fn new(mut args: env::Args) -> Result<Config, ()> {
+        let mut original = args.next().ok_or(())?;
         let mut verbose = false;
         if original.starts_with("-v") {
             verbose = true;
-            original = match args.next() {
-                None => return Err(error_message()),
-                Some(v) => v,
-            };
+            original = args.next().ok_or(())?;
         }
-        let replacement = match args.next() {
-            None => return Err(error_message()),
-            Some(v) => v,
-        };
-        let path = match args.next() {
-            None => return Err(error_message()),
-            Some(v) => v,
-        };
+        let replacement = args.next().ok_or(())?;
+        let path = args.next().ok_or(())?;
         Ok(Config {
             original,
             replacement,
