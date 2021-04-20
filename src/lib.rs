@@ -96,6 +96,7 @@ pub fn replace_in_file(
         buf.clear();
     }
     tmp_file.flush()?;
+    fs::remove_file(&path)?; // required on x86_64-pc-windows-gnu to prevent (os error 5)
     fs::rename(&tmp_path, &path)?;
     fs::set_permissions(&path, permissions)?;
     Ok(count)
